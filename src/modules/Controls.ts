@@ -7,6 +7,8 @@ type ControlParams = {
 	lightY: number
 	lightSpeed: number
 	blurRadius: number
+	minSaturation: number
+	minBrightness: number
 	exposure: number
 	saturation: number
 	gamma: number
@@ -21,14 +23,22 @@ class Controls {
 		lightY: 0,
 		lightSpeed: 0.5,
 		blurRadius: 128,
+		minSaturation: 0.1,
+		minBrightness: 0.1,
 		exposure: 0,
 		saturation: 1,
 		gamma: 1,
 	}
 
-	init() {
+	init(onKeyColorsChange?: () => void) {
 		this.dispose()
 		this.gui = new GUI()
+
+		const keyColorFolder = this.gui.addFolder('Key Colours')
+		keyColorFolder.add(this.params, 'minSaturation', 0, 1, 0.01).name('Min Saturation')
+			.onChange(() => onKeyColorsChange?.())
+		keyColorFolder.add(this.params, 'minBrightness', 0, 1, 0.01).name('Min Brightness')
+			.onChange(() => onKeyColorsChange?.())
 
 		const blurFolder = this.gui.addFolder('Blur')
 		blurFolder.add(this.params, 'blurRadius', 0, 256, 0.1).name('Radius (pixels)')

@@ -43,3 +43,30 @@ if (gradientPositions.length !== gradientHexColors.length ||
 }
 
 export const gradientColors = gradientHexColors.map(decodeHexColor);
+
+// Used when the camera frame yields too few key colors to build a gradient.
+export const fallbackGradientColors = ['#FF0000', '#00FF00', '#0000FF'].map(decodeHexColor);
+
+// Relative luminance of a linear-RGB color.
+export function luminance(color: THREE.Color): number {
+	return 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
+}
+
+// Redistribute a palette over `count` evenly spaced stops, so a gradient of any
+// length can drive a shader whose GRADIENT_SIZE is fixed at compile time.
+export function resampleGradient(colors: THREE.Color[], count: number): THREE.Color[] {
+	if (colors.length === 0 || count < 1) return [];
+	if (colors.length === 1) {
+		return Array.from({ length: count }, () => colors[0].clone());
+	}
+	return Array.from({ length: count }, (_, i) => {
+		const position = count === 1 ? 0 : (i / (count - 1)) * (colors.length - 1);
+		const low = Math.min(Math.floor(position), colors.length - 2);
+		return new THREE.Color().lerpColors(colors[low], colors[low + 1], position - low);
+	});
+}
+
+export function evenGradientPositions(count: number): number[] {
+	if (count === 1) return [0];
+	return Array.from({ length: count }, (_, i) => i / (count - 1));
+}

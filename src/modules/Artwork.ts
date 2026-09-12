@@ -5,9 +5,17 @@ import { resolution2, planeConfigs2 } from "./planeConfigs2";
 import { resolution3, planeConfigs3 } from "./planeConfigs3";
 import type { PlaneConfigType } from "./planeConfigType";
 import { createPanelGeometries } from "./panelMapping";
+import { keyColors } from "./keyColors";
 
 import controls from "./Controls";
-import { gradientColors, gradientPositions } from "./colorGradient";
+import {
+	gradientColors,
+	gradientPositions,
+	fallbackGradientColors,
+	resampleGradient,
+	evenGradientPositions,
+	luminance,
+} from "./colorGradient";
 
 import cubeVert from './glsl/cube.vert'
 import cubeFrag from './glsl/cube.frag'
@@ -37,6 +45,33 @@ const planeConfigs = {
 } satisfies Record<string, PlaneConfigSet>
 
 type CubeType = keyof typeof planeConfigs
+
+// 国土交通省 川の防災情報 live cameras along the Tama River, one per cube.
+// Served with Access-Control-Allow-Origin: *, but 403s any client that does
+// not send a browser User-Agent.
+const cameraUrls = {
+	// 多摩川二子玉川ライズタワーオフィス屋上
+	type1: 'https://cam.river.go.jp/cam/now/cctv_130001_31C03994.jpg',
+	// 多摩川二子橋
+	type2: 'https://cam.river.go.jp/cam/now/cctv_130001_31C03407.jpg',
+	// 多摩川田園調布出張所
+	type3: 'https://cam.river.go.jp/cam/now/cctv_130001_31C03351.jpg',
+} satisfies Record<CubeType, string>
+
+// The cameras publish a new frame about once a minute.
+const cameraRefreshMs = 60_000
+
+// A new frame swaps the whole palette, so ease into it instead of cutting.
+const gradientFadeSeconds = 1
+
+// debugImage preview: the 480x270 frame at 2x, with a row of key colours under it.
+const imagePreview = {
+	width: 960,
+	height: 540,
+	swatchCount: 5,
+	swatchRowHeight: 120,
+	swatchRadius: 32,
+}
 
 interface ArtworkProps {
 	wrapper: HTMLElement;
@@ -76,6 +111,18 @@ export default class Artwork{
 	private isDebug = true
 	private debugProjection = false
 	private lilGUI = false
+	private debugImage = false
+	private imageScene = new THREE.Scene();
+	private imageQuad?: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+	private imageSwatches: THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>[] = [];
+	private imageTexture?: THREE.Texture;
+	private cameraImage?: HTMLImageElement;
+	private cameraTimer?: ReturnType<typeof setInterval>;
+	// Arrays the uniforms point at, mutated in place as the fade runs.
+	private gradientCurrent?: { colors: THREE.Color[]; positions: number[] };
+	private gradientFrom?: { colors: THREE.Color[]; positions: number[] };
+	private gradientTo?: { colors: THREE.Color[]; positions: number[] };
+	private gradientFade = 1;
 
 	private sourceScene = new THREE.Scene();
 	// Constant intensity with no distance-based falloff.
@@ -137,19 +184,27 @@ export default class Artwork{
 		this.debugProjection = projectionParam === 'true' || projectionParam === '1';
 		const lilGUIParam = urlParams.get('lilGUI');
 		this.lilGUI = lilGUIParam === 'true' || lilGUIParam === '1';
+		const imageParam = urlParams.get('debugImage');
+		this.debugImage = imageParam === 'true' || imageParam === '1';
 
-		if (this.lilGUI) controls.init();
+		if (this.lilGUI) controls.init(() => this.applyKeyColors());
 
 		this.init();
 		this.loop()
 	}
 
 	private init(){
+		const size = this.debugImage
+			? { x: imagePreview.width, y: imagePreview.height + imagePreview.swatchRowHeight }
+			: this.debugProjection
+				? { x: 768, y: 768 }
+				: planeConfigs[this.cubeType].resolution;
+
 		common.init({
 			wrapper: this.props.wrapper,
 			canvas: this.props.canvas,
-			width: this.debugProjection ? 768 : planeConfigs[this.cubeType].resolution.x,
-			height: this.debugProjection ? 768 : planeConfigs[this.cubeType].resolution.y
+			width: size.x,
+			height: size.y
 		});
 
 		const renderer = common.renderer;
@@ -174,6 +229,40 @@ export default class Artwork{
 
 		renderer.outputEncoding = THREE.sRGBEncoding;
 		renderer.toneMapping = THREE.NoToneMapping;
+
+		if (this.debugImage) {
+			// Rendered in pixel space by common.camera, so the swatch row sits
+			// under the frame rather than over it.
+			this.imageQuad = new THREE.Mesh(
+				new THREE.PlaneGeometry(imagePreview.width, imagePreview.height),
+				// Black until the frame arrives, rather than a white flash.
+				new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false }),
+			);
+			this.imageQuad.position.y = imagePreview.swatchRowHeight / 2;
+			this.imageScene.add(this.imageQuad);
+
+			const spacing = imagePreview.width / imagePreview.swatchCount;
+			for (let i = 0; i < imagePreview.swatchCount; i++) {
+				const swatch = new THREE.Mesh(
+					new THREE.CircleGeometry(imagePreview.swatchRadius, 64),
+					new THREE.MeshBasicMaterial({ toneMapped: false }),
+				);
+				swatch.position.set(
+					-imagePreview.width / 2 + spacing * (i + 0.5),
+					-imagePreview.height / 2,
+					0,
+				);
+				// Shown only once a colour has been found for it.
+				swatch.visible = false;
+				this.imageSwatches.push(swatch);
+				this.imageScene.add(swatch);
+			}
+
+		}
+
+		// The frame drives the gradient in every mode, not just the preview.
+		this.loadCameraFrame();
+		this.cameraTimer = setInterval(() => this.loadCameraFrame(), cameraRefreshMs);
 
 		// The +Y opening lets one camera see the interior faces from above.
 		this.sourceScene.add(this.sourceCube);
@@ -311,6 +400,11 @@ export default class Artwork{
 	dispose() {
 		this.isDisposed = true;
 
+		if (this.cameraTimer !== undefined) {
+			clearInterval(this.cameraTimer);
+			this.cameraTimer = undefined;
+		}
+
 		if (this.animationFrame !== undefined) {
 			cancelAnimationFrame(this.animationFrame);
 		}
@@ -342,6 +436,16 @@ export default class Artwork{
 		this.projectionCube?.geometry.dispose();
 		this.projectionCube?.material.dispose();
 		this.projectionScene.clear();
+		this.imageQuad?.geometry.dispose();
+		this.imageQuad?.material.dispose();
+		for (const swatch of this.imageSwatches) {
+			swatch.geometry.dispose();
+			swatch.material.dispose();
+		}
+		this.imageSwatches = [];
+		this.imageTexture?.dispose();
+		this.cameraImage = undefined;
+		this.imageScene.clear();
 		this.sourceCube.geometry.dispose();
 		this.sourceMaterial.dispose();
 		this.sourceScene.clear();
@@ -350,12 +454,132 @@ export default class Artwork{
 		common.dispose();
 	}
 
+	private loadCameraFrame() {
+		if (this.isDisposed) return;
+
+		const url = cameraUrls[this.cubeType];
+		const loader = new THREE.TextureLoader();
+		loader.setCrossOrigin('anonymous');
+		// Cache-bust so each refresh fetches the current frame, not the stored one.
+		loader.load(`${url}?t=${Date.now()}`, (texture) => {
+			if (this.isDisposed) {
+				texture.dispose();
+				return;
+			}
+
+			texture.encoding = THREE.sRGBEncoding;
+			const previous = this.imageTexture;
+			this.imageTexture = texture;
+			this.cameraImage = texture.image as HTMLImageElement;
+
+			if (this.imageQuad) {
+				this.imageQuad.material.map = texture;
+				this.imageQuad.material.color.setHex(0xffffff);
+				this.imageQuad.material.needsUpdate = true;
+			}
+
+			// Only once nothing points at it any more.
+			previous?.dispose();
+
+			this.applyKeyColors();
+		}, undefined, () => {
+			console.error(`Camera image failed to load: ${url}`);
+			// Keep whatever the last good frame gave us; only fall back if the
+			// very first fetch never landed.
+			if (!this.cameraImage) this.setGradient(fallbackGradientColors);
+		});
+	}
+
+	// Re-reads the frame with the current thresholds, then repaints the swatch
+	// row and the gradient the artwork samples.
+	private applyKeyColors() {
+		if (!this.cameraImage) return;
+
+		const sampled = keyColors(this.cameraImage, imagePreview.swatchCount, {
+			minSaturation: controls.params.minSaturation,
+			minBrightness: controls.params.minBrightness,
+			resolution: 50,
+		});
+
+		// The frames are sRGB, and so are the values sampled from them.
+		const colors = sampled
+			.map((color) => new THREE.Color()
+				.setRGB(color.r, color.g, color.b)
+				.convertSRGBToLinear())
+			.sort((a, b) => luminance(a) - luminance(b));
+
+		console.info(`Key colours found: ${colors.length}/${imagePreview.swatchCount}`);
+
+		this.imageSwatches.forEach((swatch, i) => {
+			const color = colors[i];
+			swatch.visible = color !== undefined;
+			if (color) swatch.material.color.copy(color);
+		});
+
+		// Two stops are the minimum a gradient can interpolate between.
+		this.setGradient(colors.length < 2 ? fallbackGradientColors : colors);
+	}
+
+	private setGradient(colors: THREE.Color[]) {
+		// GRADIENT_SIZE is compiled into the shader, so any palette has to be
+		// redistributed over exactly that many stops.
+		const count = gradientColors.length;
+		const target = {
+			colors: resampleGradient(colors, count),
+			positions: evenGradientPositions(count),
+		};
+
+		// Take ownership of the uniform arrays on the first change, so the
+		// fade never writes into the imported palette.
+		if (!this.gradientCurrent) {
+			this.gradientCurrent = {
+				colors: gradientColors.map((color) => color.clone()),
+				positions: [...gradientPositions],
+			};
+			this.colorUniforms.uGradient.value = this.gradientCurrent.colors;
+			this.colorUniforms.uGradientPositions.value = this.gradientCurrent.positions;
+		}
+
+		this.gradientFrom = {
+			colors: this.gradientCurrent.colors.map((color) => color.clone()),
+			positions: [...this.gradientCurrent.positions],
+		};
+		this.gradientTo = target;
+		this.gradientFade = 0;
+	}
+
+	private advanceGradientFade(delta: number) {
+		const current = this.gradientCurrent;
+		const from = this.gradientFrom;
+		const to = this.gradientTo;
+		if (!current || !from || !to || this.gradientFade >= 1) return;
+
+		this.gradientFade = Math.min(1, this.gradientFade + delta / gradientFadeSeconds);
+
+		// Array uniforms re-upload every frame, so mutating in place is enough.
+		for (let i = 0; i < current.colors.length; i++) {
+			current.colors[i].lerpColors(from.colors[i], to.colors[i], this.gradientFade);
+			current.positions[i] = THREE.MathUtils.lerp(
+				from.positions[i],
+				to.positions[i],
+				this.gradientFade,
+			);
+		}
+	}
+
 	private update() {
 		const renderer = common.renderer;
 		if (!renderer) return;
 
+		if (this.debugImage) {
+			renderer.setRenderTarget(null);
+			renderer.render(this.imageScene, common.camera);
+			return;
+		}
+
 		const delta = this.clock.getDelta();
 		this.time += delta;
+		this.advanceGradientFade(delta);
 		if (!controls.params.isTimePaused) {
 			this.lightAngle += delta * controls.params.lightSpeed;
 		}
