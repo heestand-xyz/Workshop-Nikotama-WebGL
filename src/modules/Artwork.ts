@@ -75,6 +75,7 @@ export default class Artwork{
 	private cubeType: CubeType = 'type2'
 	private isDebug = true
 	private debugProjection = false
+	private lilGUI = false
 
 	private sourceScene = new THREE.Scene();
 	// Constant intensity with no distance-based falloff.
@@ -134,8 +135,10 @@ export default class Artwork{
 		}
 		const projectionParam = urlParams.get('debugProjection');
 		this.debugProjection = projectionParam === 'true' || projectionParam === '1';
+		const lilGUIParam = urlParams.get('lilGUI');
+		this.lilGUI = lilGUIParam === 'true' || lilGUIParam === '1';
 
-		controls.init();
+		if (this.lilGUI) controls.init();
 
 		this.init();
 		this.loop()

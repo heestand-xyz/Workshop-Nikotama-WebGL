@@ -71,6 +71,7 @@ http://localhost:5173/?cubeType=type1
 | --- | --- | --- | --- |
 | `cubeType` | `type1`、`type2`、`type3` | `type2` | キューブのレイアウト／バージョンを選択します。 |
 | `debug` | `true`、`1`、`false`など | `true` | キューブの各面を確認するデバッグ表示と、各面を合成した完成形の表示を切り替えます。 |
+| `lilGUI` | `true`、`1`、`false`など | `false` | lil-guiのコントロールパネルを表示します。 |
 
 ### `debug`クエリについて
 
