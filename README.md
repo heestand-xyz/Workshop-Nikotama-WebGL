@@ -55,6 +55,9 @@ luminance.
 These key colours are the gradient the artwork samples, in every mode — not
 only under `debugImage`. The frame is fetched on load and refreshed every
 60 seconds, so the palette follows the light on the river through the day.
+Until the first frame arrives the gradient runs black to white, and every
+change — the first frame, each refresh, a threshold move — crossfades over one
+second rather than cutting.
 
 The colours are redistributed over the fixed number of gradient stops the
 shader is compiled for. When a frame yields fewer than two qualifying colours —

@@ -9,8 +9,7 @@ import { keyColors } from "./keyColors";
 
 import controls from "./Controls";
 import {
-	gradientColors,
-	gradientPositions,
+	initialGradientColors,
 	fallbackGradientColors,
 	resampleGradient,
 	evenGradientPositions,
@@ -64,11 +63,15 @@ const cameraRefreshMs = 60_000
 // A new frame swaps the whole palette, so ease into it instead of cutting.
 const gradientFadeSeconds = 1
 
+// Up to this many key colours are sampled from a frame. They are the gradient's
+// stops and the swatches under the debugImage preview, so GRADIENT_SIZE is
+// compiled to match.
+const keyColorCount = 5
+
 // debugImage preview: the 480x270 frame at 2x, with a row of key colours under it.
 const imagePreview = {
 	width: 960,
 	height: 540,
-	swatchCount: 5,
 	swatchRowHeight: 120,
 	swatchRadius: 32,
 }
@@ -155,8 +158,8 @@ export default class Artwork{
 	private projectionCube?: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
 	private projectorMatrix = new THREE.Matrix4();
 	private colorUniforms = {
-		uGradient: { value: gradientColors },
-		uGradientPositions: { value: gradientPositions },
+		uGradient: { value: resampleGradient(initialGradientColors, keyColorCount) },
+		uGradientPositions: { value: evenGradientPositions(keyColorCount) },
 		uExposure: { value: 0 },
 		uSaturation: { value: 1 },
 		uGamma: { value: 1 },
@@ -241,8 +244,8 @@ export default class Artwork{
 			this.imageQuad.position.y = imagePreview.swatchRowHeight / 2;
 			this.imageScene.add(this.imageQuad);
 
-			const spacing = imagePreview.width / imagePreview.swatchCount;
-			for (let i = 0; i < imagePreview.swatchCount; i++) {
+			const spacing = imagePreview.width / keyColorCount;
+			for (let i = 0; i < keyColorCount; i++) {
 				const swatch = new THREE.Mesh(
 					new THREE.CircleGeometry(imagePreview.swatchRadius, 64),
 					new THREE.MeshBasicMaterial({ toneMapped: false }),
@@ -321,7 +324,7 @@ export default class Artwork{
 			new THREE.ShaderMaterial({
 				vertexShader: distortionVert,
 				fragmentShader: cubeFrag,
-				defines: { GRADIENT_SIZE: gradientColors.length },
+				defines: { GRADIENT_SIZE: keyColorCount },
 				uniforms: {
 					uCapture: { value: this.distortionTarget.texture },
 					...this.colorUniforms,
@@ -368,7 +371,7 @@ export default class Artwork{
 			const material = new THREE.ShaderMaterial({
 				vertexShader: cubeVert,
 				fragmentShader: cubeFrag,
-				defines: { GRADIENT_SIZE: gradientColors.length },
+				defines: { GRADIENT_SIZE: keyColorCount },
 				uniforms: {
 					uCapture: { value: target.texture },
 					...this.colorUniforms,
@@ -495,7 +498,7 @@ export default class Artwork{
 	private applyKeyColors() {
 		if (!this.cameraImage) return;
 
-		const sampled = keyColors(this.cameraImage, imagePreview.swatchCount, {
+		const sampled = keyColors(this.cameraImage, keyColorCount, {
 			minSaturation: controls.params.minSaturation,
 			minBrightness: controls.params.minBrightness,
 			resolution: 50,
@@ -508,7 +511,7 @@ export default class Artwork{
 				.convertSRGBToLinear())
 			.sort((a, b) => luminance(a) - luminance(b));
 
-		console.info(`Key colours found: ${colors.length}/${imagePreview.swatchCount}`);
+		console.info(`Key colours found: ${colors.length}/${keyColorCount}`);
 
 		this.imageSwatches.forEach((swatch, i) => {
 			const color = colors[i];
@@ -523,7 +526,7 @@ export default class Artwork{
 	private setGradient(colors: THREE.Color[]) {
 		// GRADIENT_SIZE is compiled into the shader, so any palette has to be
 		// redistributed over exactly that many stops.
-		const count = gradientColors.length;
+		const count = keyColorCount;
 		const target = {
 			colors: resampleGradient(colors, count),
 			positions: evenGradientPositions(count),
@@ -533,8 +536,8 @@ export default class Artwork{
 		// fade never writes into the imported palette.
 		if (!this.gradientCurrent) {
 			this.gradientCurrent = {
-				colors: gradientColors.map((color) => color.clone()),
-				positions: [...gradientPositions],
+				colors: this.colorUniforms.uGradient.value.map((color) => color.clone()),
+				positions: [...this.colorUniforms.uGradientPositions.value],
 			};
 			this.colorUniforms.uGradient.value = this.gradientCurrent.colors;
 			this.colorUniforms.uGradientPositions.value = this.gradientCurrent.positions;
