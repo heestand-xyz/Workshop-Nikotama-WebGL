@@ -1,26 +1,31 @@
-#include "./utils/hsv2rgb.glsl"
-#include "./utils/rgb2hsv.glsl"
-#include "./utils/snoise3d.glsl"
-
-uniform float uTime;
-
-varying vec3 vPosition;
+uniform sampler2D uCapture;
+uniform float uExposure;
+uniform float uSaturation;
+uniform float uGamma;
+uniform vec3 uGradient[GRADIENT_SIZE];
+uniform float uGradientPositions[GRADIENT_SIZE];
 varying vec2 vUv;
 
-void main(){
-  vec3 uvw = vPosition + 0.5;
+vec3 gradientColor(float luminance) {
+	float position = clamp(luminance, 0.0, 1.0);
+	for (int i = 0; i < GRADIENT_SIZE - 1; i++) {
+		if (position <= uGradientPositions[i + 1]) {
+			float blend = (position - uGradientPositions[i]) /
+				(uGradientPositions[i + 1] - uGradientPositions[i]);
+			return mix(uGradient[i], uGradient[i + 1], blend);
+		}
+	}
+	return uGradient[GRADIENT_SIZE - 1];
+}
 
-  vec3 falloff = 1.0 - pow(smoothstep(0.0, 1.0, abs(vPosition)), vec3(2.0));
-  float innerShadow = falloff.x * falloff.y * falloff.z;
-
-  #if RENDER_MODE == 1
-    vec3 color = vec3(innerShadow);
-  #elif RENDER_MODE == 2
-    float noise = snoise3D(vec3(vPosition) + vec3(0.0, 0.0, uTime * 0.2));
-    vec3 color = vec3(noise * 0.5 + 0.5);
-  #else
-    vec3 color = uvw;
-  #endif
-
-  gl_FragColor = vec4(color, 1.0);
+void main() {
+	vec3 captured = texture2D(uCapture, vUv).rgb * exp2(uExposure);
+	float luminance = dot(captured, vec3(0.2126, 0.7152, 0.0722));
+	vec3 color = gradientColor(luminance);
+	float mappedLuminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
+	color = mix(vec3(mappedLuminance), color, uSaturation);
+	color = pow(max(color, vec3(0.0)), vec3(1.0 / uGamma));
+	gl_FragColor = vec4(color, 1.0);
+	// Display encoding is applied once, after all floating-point passes.
+	#include <encodings_fragment>
 }
