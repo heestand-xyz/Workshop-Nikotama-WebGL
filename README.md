@@ -28,6 +28,7 @@ Parameter names and values are case-sensitive.
 | --- | --- | --- | --- |
 | `cubeType` | `type1`, `type2`, `type3` | `type2` | Selects the cube layout/version. |
 | `debug` | `true` or `1` to enable; any other supplied value disables | `true` | Selects the debug camera and separated cube-face view. Use `debug=false` for the composed output. |
+| `debugProjection` | `true` or `1` to enable; any other supplied value disables | `false` | Shows the projector source image flat at 768 × 768, before it is mapped onto the cube faces. Overrides the canvas size. |
 | `lilGUI` | `true` or `1` to enable; any other supplied value disables | `false` | Shows the lil-gui control panel. |
 
 Combine parameters with `&`. For example, the composed Type 3 version is:

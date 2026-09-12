@@ -71,6 +71,7 @@ http://localhost:5173/?cubeType=type1
 | --- | --- | --- | --- |
 | `cubeType` | `type1`、`type2`、`type3` | `type2` | キューブのレイアウト／バージョンを選択します。 |
 | `debug` | `true`、`1`、`false`など | `true` | キューブの各面を確認するデバッグ表示と、各面を合成した完成形の表示を切り替えます。 |
+| `debugProjection` | `true`、`1`、`false`など | `false` | キューブの各面にマッピングする前のプロジェクター映像を、768×768の平面で表示します。キャンバスサイズが上書きされます。 |
 | `lilGUI` | `true`、`1`、`false`など | `false` | lil-guiのコントロールパネルを表示します。 |
 
 ### `debug`クエリについて

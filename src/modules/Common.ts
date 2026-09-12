@@ -26,7 +26,7 @@ class Common {
 
 		if (!wrapper.contains(this.renderer.domElement)) wrapper.appendChild(this.renderer.domElement);
 		this.renderer.setPixelRatio(this.pixelRatio);
-		this.renderer.setClearColor(0xf1f1f1, 1);
+		this.renderer.setClearColor(0x000000, 0);
 
 		this.setSize(width, height);
 	}
