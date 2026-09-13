@@ -27,7 +27,7 @@ Parameter names and values are case-sensitive.
 | Parameter | Accepted values | Default | Description |
 | --- | --- | --- | --- |
 | `cubeType` | `type1`, `type2`, `type3` | `type2` | Selects the cube layout/version. |
-| `debug` | `true` or `1` to enable; any other supplied value disables | `true` | Selects the debug camera and separated cube-face view. Use `debug=false` for the composed output. |
+| `debug` | `true` or `1` to enable; any other supplied value disables | `false` | Defaults to the composed output. Use `debug=true` for the debug camera and separated cube-face view. |
 | `debugProjection` | `true` or `1` to enable; any other supplied value disables | `false` | Shows the projector source image flat at 768 × 768, before it is mapped onto the cube faces. Overrides the canvas size. |
 | `debugImage` | `true` or `1` to enable; any other supplied value disables | `false` | Shows the live Tama River camera paired with the selected `cubeType`, with its key colours in a row beneath. Overrides the canvas size. |
 | `lilGUI` | `true` or `1` to enable; any other supplied value disables | `false` | Shows the lil-gui control panel, including the key colour thresholds. |

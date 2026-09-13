@@ -111,7 +111,7 @@ export default class Artwork{
 	private time = 0
 	private lightAngle = 0
 	private cubeType: CubeType = 'type2'
-	private isDebug = true
+	private isDebug = false
 	private debugProjection = false
 	private lilGUI = false
 	private debugImage = false
