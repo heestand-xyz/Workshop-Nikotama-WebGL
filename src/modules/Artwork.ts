@@ -63,9 +63,8 @@ const cameraRefreshMs = 60_000
 // A new frame swaps the whole palette, so ease into it instead of cutting.
 const gradientFadeSeconds = 1
 
-// Up to this many key colours are sampled from a frame. They are the gradient's
-// stops and the swatches under the debugImage preview, so GRADIENT_SIZE is
-// compiled to match.
+// Sample up to five camera colours; mirroring adds the reverse without
+// repeating the final colour.
 const keyColorCount = 5
 
 // debugImage preview: the 480x270 frame at 2x, with a row of key colours under it.
@@ -115,6 +114,10 @@ export default class Artwork{
 	private debugProjection = false
 	private lilGUI = false
 	private debugImage = false
+	private debugColors = true
+	private get gradientStopCount() {
+		return this.debugColors ? keyColorCount * 2 - 1 : keyColorCount;
+	}
 	private imageScene = new THREE.Scene();
 	private imageQuad?: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
 	private imageSwatches: THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>[] = [];
@@ -161,7 +164,7 @@ export default class Artwork{
 		uGradient: { value: resampleGradient(initialGradientColors, keyColorCount) },
 		uGradientPositions: { value: evenGradientPositions(keyColorCount) },
 		uExposure: { value: 0 },
-		uSaturation: { value: 1 },
+		uSaturation: { value: 2.0 },
 		uGamma: { value: 1 },
 	};
 
@@ -189,6 +192,13 @@ export default class Artwork{
 		this.lilGUI = lilGUIParam === 'true' || lilGUIParam === '1';
 		const imageParam = urlParams.get('debugImage');
 		this.debugImage = imageParam === 'true' || imageParam === '1';
+		const colorsParam = urlParams.get('debugColors');
+		if (colorsParam !== null) {
+			this.debugColors = colorsParam === 'true' || colorsParam === '1';
+		}
+
+		this.colorUniforms.uGradient.value = resampleGradient(initialGradientColors, this.gradientStopCount);
+		this.colorUniforms.uGradientPositions.value = evenGradientPositions(this.gradientStopCount);
 
 		if (this.lilGUI) controls.init(() => this.applyKeyColors());
 
@@ -244,8 +254,8 @@ export default class Artwork{
 			this.imageQuad.position.y = imagePreview.swatchRowHeight / 2;
 			this.imageScene.add(this.imageQuad);
 
-			const spacing = imagePreview.width / keyColorCount;
-			for (let i = 0; i < keyColorCount; i++) {
+			const spacing = imagePreview.width / this.gradientStopCount;
+			for (let i = 0; i < this.gradientStopCount; i++) {
 				const swatch = new THREE.Mesh(
 					new THREE.CircleGeometry(imagePreview.swatchRadius, 64),
 					new THREE.MeshBasicMaterial({ toneMapped: false }),
@@ -324,7 +334,7 @@ export default class Artwork{
 			new THREE.ShaderMaterial({
 				vertexShader: distortionVert,
 				fragmentShader: cubeFrag,
-				defines: { GRADIENT_SIZE: keyColorCount },
+				defines: { GRADIENT_SIZE: this.gradientStopCount },
 				uniforms: {
 					uCapture: { value: this.distortionTarget.texture },
 					...this.colorUniforms,
@@ -371,7 +381,7 @@ export default class Artwork{
 			const material = new THREE.ShaderMaterial({
 				vertexShader: cubeVert,
 				fragmentShader: cubeFrag,
-				defines: { GRADIENT_SIZE: keyColorCount },
+				defines: { GRADIENT_SIZE: this.gradientStopCount },
 				uniforms: {
 					uCapture: { value: target.texture },
 					...this.colorUniforms,
@@ -498,7 +508,8 @@ export default class Artwork{
 	private applyKeyColors() {
 		if (!this.cameraImage) return;
 
-		const sampled = keyColors(this.cameraImage, keyColorCount, {
+		const sampleCount = keyColorCount;
+		const sampled = keyColors(this.cameraImage, sampleCount, {
 			minSaturation: controls.params.minSaturation,
 			minBrightness: controls.params.minBrightness,
 			resolution: 50,
@@ -511,7 +522,16 @@ export default class Artwork{
 				.convertSRGBToLinear())
 			.sort((a, b) => luminance(a) - luminance(b));
 
-		console.info(`Key colours found: ${colors.length}/${keyColorCount}`);
+		console.info(`Key colours found: ${colors.length}/${sampleCount}`);
+
+		// Two stops are the minimum a gradient can interpolate between.
+		this.setGradient(colors.length < 2 ? fallbackGradientColors : colors);
+	}
+
+	private setGradient(colors: THREE.Color[]) {
+		if (this.debugColors) {
+			colors = [...colors, ...colors.slice(0, -1).reverse()];
+		}
 
 		this.imageSwatches.forEach((swatch, i) => {
 			const color = colors[i];
@@ -519,18 +539,16 @@ export default class Artwork{
 			if (color) swatch.material.color.copy(color);
 		});
 
-		// Two stops are the minimum a gradient can interpolate between.
-		this.setGradient(colors.length < 2 ? fallbackGradientColors : colors);
-	}
-
-	private setGradient(colors: THREE.Color[]) {
-		// GRADIENT_SIZE is compiled into the shader, so any palette has to be
-		// redistributed over exactly that many stops.
-		const count = keyColorCount;
+		// Preserve every palette stop; pad unused shader slots at the endpoint.
+		const count = this.gradientStopCount;
 		const target = {
-			colors: resampleGradient(colors, count),
-			positions: evenGradientPositions(count),
+			colors: colors.map((color) => color.clone()),
+			positions: evenGradientPositions(colors.length),
 		};
+		while (target.colors.length < count) {
+			target.colors.push(colors[colors.length - 1].clone());
+			target.positions.push(1);
+		}
 
 		// Take ownership of the uniform arrays on the first change, so the
 		// fade never writes into the imported palette.

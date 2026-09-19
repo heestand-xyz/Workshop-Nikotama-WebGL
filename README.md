@@ -30,6 +30,7 @@ Parameter names and values are case-sensitive.
 | `debug` | `true` or `1` to enable; any other supplied value disables | `false` | Defaults to the composed output. Use `debug=true` for the debug camera and separated cube-face view. |
 | `debugProjection` | `true` or `1` to enable; any other supplied value disables | `false` | Shows the projector source image flat at 768 × 768, before it is mapped onto the cube faces. Overrides the canvas size. |
 | `debugImage` | `true` or `1` to enable; any other supplied value disables | `false` | Shows the live Tama River camera paired with the selected `cubeType`, with its key colours in a row beneath. Overrides the canvas size. |
+| `debugColors` | `true` or `1` to enable; any other supplied value disables | `true` | Mirrors all sampled camera colours: `[A, B, C, D, E]` becomes `[A, B, C, D, E, D, C, B, A]` for all cube types. Set `debugColors=false` to restore five sampled colours. |
 | `lilGUI` | `true` or `1` to enable; any other supplied value disables | `false` | Shows the lil-gui control panel, including the key colour thresholds. |
 
 ### Reference cameras
@@ -44,7 +45,10 @@ feeds come from the MLIT 川の防災情報 network; the URLs are in
 | `type2` | 多摩川二子橋 — Tama River Futako Bridge |
 | `type3` | 多摩川田園調布出張所 — Tama River Denenchōfu Branch Office |
 
-Under the frame, up to five key colours are shown as circles. They are picked
+Under the frame, the gradient colours are shown as circles. With `debugColors=true`
+(the default), all sampled colours are mirrored without repeating the last colour:
+`[A, B, C, D, E]` becomes `[A, B, C, D, E, D, C, B, A]`. With
+`debugColors=false`, up to five key colours are used directly. Key colours are picked
 by farthest-point sampling in RGB over the pixels of a copy of the frame scaled
 to fit 50 × 50, keeping only those with HSB saturation and brightness above the
 current thresholds (`src/modules/keyColors.ts`), then sorted from low to high

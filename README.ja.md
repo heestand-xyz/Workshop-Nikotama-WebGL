@@ -73,6 +73,7 @@ http://localhost:5173/?cubeType=type1
 | `debug` | `true`、`1`、`false`など | `false` | デフォルトでは各面を合成した完成形を表示します。`debug=true`でキューブの各面を確認するデバッグ表示に切り替えます。 |
 | `debugProjection` | `true`、`1`、`false`など | `false` | キューブの各面にマッピングする前のプロジェクター映像を、768×768の平面で表示します。キャンバスサイズが上書きされます。 |
 | `debugImage` | `true`、`1`、`false`など | `false` | 選択中の`cubeType`に対応する多摩川のライブカメラ映像と、その代表色を下部に表示します。キャンバスサイズが上書きされます。 |
+| `debugColors` | `true`、`1`、`false`など | `true` | 全キューブでカメラの代表色を減らさず、`[A, B, C, D, E]` を `[A, B, C, D, E, D, C, B, A]` に展開します。`false`で従来の5色に戻します。 |
 | `lilGUI` | `true`、`1`、`false`など | `false` | lil-guiのコントロールパネル（代表色のしきい値を含む）を表示します。 |
 
 ### 参照カメラ

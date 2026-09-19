@@ -26,7 +26,7 @@ class Controls {
 		minSaturation: 0.1,
 		minBrightness: 0.1,
 		exposure: 0,
-		saturation: 1,
+		saturation: 2.0,
 		gamma: 1,
 	}
 
