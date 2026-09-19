@@ -50,7 +50,7 @@ type CubeType = keyof typeof planeConfigs
 // not send a browser User-Agent.
 const cameraUrls = {
 	// 多摩川二子玉川ライズタワーオフィス屋上
-	type1: 'https://cam.river.go.jp/cam/now/cctv_130001_31C03994.jpg',
+	type1: 'https://cam.river.go.jp/cam/now/121320171.jpg',
 	// 多摩川二子橋
 	type2: 'https://cam.river.go.jp/cam/now/cctv_130001_31C03407.jpg',
 	// 多摩川田園調布出張所
